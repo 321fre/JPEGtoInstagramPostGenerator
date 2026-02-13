@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Justified Text → Instagram Slides (with Random Gradient)</title>
+<style>
+  body {font-family:Arial,Helvetica,sans-serif; padding:20px; background:#f4f4f4;}
+  textarea, input[type=text], input[type=number] {width:100%;}
+  .controls {display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;}
+  .controls > * {flex:1 1 150px;}
+  #slides {margin-top:20px; display:flex; flex-direction:column; gap:20px;}
+  canvas {border:2px solid #333; width:100%; max-width:600px;}
+</style>
+</head>
+<body>
+
+<h2>Paste your text</h2>
+<textarea id="inputText" rows="6" placeholder="Paste text here…"></textarea>
+
+<h3>Options</h3>
+<div class="controls">
+  <label>Subject title (appears on every slide)
+    <input type="text" id="subjectTitle" placeholder="e.g. Biology 101">
+  </label>
+
+  <label>Title font size (px)
+    <input type="number" id="titleSize" min="30" max="200" value="72">
+  </label>
+
+  <label>Title colour
+    <input type="color" id="titleColor" value="#ffffff">
+  </label>
+
+  <label>Text colour
+    <input type="color" id="textColor" value="#000000">
+  </label>
+
+  <label>Background gradient start
+    <input type="color" id="bgStart" value="#ff7e5f">
+  </label>
+
+  <label>Background gradient end
+    <input type="color" id="bgEnd" value="#feb47b">
+  </label>
+
+  <button id="randomGradBtn">Random Gradient</button>
+
+  <label>Watermark text
+    <input type="text" id="watermarkText" placeholder="e.g. @myEduPage">
+  </label>
+
+  <label>Watermark colour
+    <input type="color" id="watermarkColor" value="#ffffff">
+  </label>
+
+  <button id="exportAllBtn">Export all slides (JPEG)</button>
+</div>
+
+<div id="slides"></div>
+
+<script>
+/* ---------- Configuration ---------- */
+const CANVAS_W = 1080;          // Instagram square
+const CANVAS_H = 1080;
+const MARGIN   = 80;           // equal margin on all sides
+const FONT_FAMILY = 'Arial';
+const FONT_SIZE   = 48;        // body text size (px)
+const LINE_HEIGHT = FONT_SIZE * 1.2;
+/* ----------------------------------- */
+
+const input        = document.getElementById('inputText');
+const subjectTitle = document.getElementById('subjectTitle');
+const titleSize    = document.getElementById('titleSize');
+const titleColor   = document.getElementById('titleColor');
+const textColor    = document.getElementById('textColor');
+const bgStart      = document.getElementById('bgStart');
+const bgEnd        = document.getElementById('bgEnd');
+const randomGradBtn= document.getElementById('randomGradBtn');
+const watermarkText= document.getElementById('watermarkText');
+const watermarkColor= document.getElementById('watermarkColor');
+const exportBtn    = document.getElementById('exportAllBtn');
+const slidesDiv    = document.getElementById('slides');
+
+/* ---- Helper: create a canvas with gradient background ---- */
+function createCanvas() {
+  const c = document.createElement('canvas');
+  c.width = CANVAS_W;
+  c.height = CANVAS_H;
+  const ctx = c.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H);
+  grad.addColorStop(0, bgStart.value);
+  grad.addColorStop(1, bgEnd.value);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  return {c, ctx};
+}
+
+/* ---- Random colour generator ---- */
+function randomHex() {
+  const r = Math.floor(Math.random() * 256);
+  const g = Math.floor(Math.random() * 256);
+  const b = Math.floor(Math.random() * 256);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
+/* ---- Measure text (cached ctx) ---- */
+let measureCtx = null;
+function getMeasureCtx() {
+  if (!measureCtx) {
+    const tmp = document.createElement('canvas');
+    measureCtx = tmp.getContext('2d');
+    measureCtx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+  }
+  return measureCtx;
+}
+function measureText(txt, size = FONT_SIZE) {
+  const ctx = getMeasureCtx();
+  ctx.font = `${size}px ${FONT_FAMILY}`;
+  return ctx.measureText(txt);
+}
+
+/* ---- Word‑wrap + justification (body text) ---- */
+function wrapAndJustify(paragraph) {
+  const words = paragraph.split(/\s+/).filter(w => w.length);
+  const maxLineWidth = CANVAS_W - 2 * MARGIN;
+  const lines = [];
+  let line = [];
+
+  while (words.length) {
+    const word = words.shift();
+    line.push(word);
+    const test = line.join(' ');
+    if (measureText(test).width > maxLineWidth) {
+      line.pop();
+      words.unshift(word);
+      lines.push(line);
+      line = [];
+    }
+  }
+  if (line.length) lines.push(line);
+
+  return lines.map((wArr, i) => {
+    if (i === lines.length - 1 || wArr.length === 1) return wArr.join(' ');
+    const totalWordsWidth = wArr.reduce((s, w) => s + measureText(w).width, 0);
+    const spaceWidth = (maxLineWidth - totalWordsWidth) / (wArr.length - 1);
+    let lineStr = '';
+    wArr.forEach((w, idx) => {
+      lineStr += w;
+      if (idx < wArr.length - 1) {
+        const spaces = Math.max(1, Math.round(spaceWidth / measureText(' ').width));
+        lineStr += ' '.repeat(spaces);
+      }
+    });
+    return lineStr;
+  });
+}
+
+/* ---- Render all slides ---- */
+function renderSlides() {
+  slidesDiv.innerHTML = '';
+  const raw = input.value.trim();
+  if (!raw) return;
+
+  const title = subjectTitle.value.trim();
+  const hasTitle = title.length > 0;
+  const titleFontSize = parseInt(titleSize.value, 10) || 72;
+  const titleLineHeight = titleFontSize * 1.2;
+
+  const paragraphs = raw.split('\n');
+  const bodyLines = [];
+  paragraphs.forEach(p => {
+    if (p === '') bodyLines.push('');
+    else bodyLines.push(...wrapAndJustify(p));
+  });
+
+  let lineIdx = 0;
+  while (lineIdx < bodyLines.length) {
+    const {c, ctx} = createCanvas();
+
+    // title
+    let y = MARGIN;
+    if (hasTitle) {
+      ctx.fillStyle = titleColor.value;
+      ctx.font = `${titleFontSize}px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(title, CANVAS_W / 2, y);
+      y += titleLineHeight + 20;
+    }
+
+    // body text
+    ctx.fillStyle = textColor.value;
+    ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    while (lineIdx < bodyLines.length) {
+      const line = bodyLines[lineIdx];
+      const lineHeight = LINE_HEIGHT;
+      if (y + lineHeight > CANVAS_H - MARGIN) break;
+
+      if (line === '') y += lineHeight;
+      else {
+        drawJustifiedLine(ctx, line, y);
+        y += lineHeight;
+      }
+      lineIdx++;
+    }
+
+    // watermark
+    if (watermarkText.value.trim()) {
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = watermarkColor.value;
+      ctx.font = `120px ${FONT_FAMILY}`;
+      ctx.translate(CANVAS_W / 2, CANVAS_H / 2);
+      ctx.rotate(-Math.PI / 4);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(watermarkText.value, 0, 0);
+      ctx.restore();
+    }
+
+    slidesDiv.appendChild(c);
+  }
+}
+
+/* ---- Draw a single justified line (body text) ---- */
+function drawJustifiedLine(ctx, line, y) {
+  const maxLineWidth = CANVAS_W - 2 * MARGIN;
+  const words = line.split(' ');
+  if (words.length === 1) {
+    ctx.fillText(line, MARGIN, y);
+    return;
+  }
+  const wordsWidth = words.reduce((s, w) => s + ctx.measureText(w).width, 0);
+  const spaceWidth = (maxLineWidth - wordsWidth) / (words.length - 1);
+  let x = MARGIN;
+  words.forEach((w, i) => {
+    ctx.fillText(w, x, y);
+    x += ctx.measureText(w).width + spaceWidth;
+  });
+}
+
+/* ---- Event listeners ---- */
+[input, subjectTitle, titleSize, titleColor, textColor,
+ bgStart, bgEnd, watermarkText, watermarkColor]
+ .forEach(el => el.addEventListener('input', renderSlides));
+
+randomGradBtn.addEventListener('click', () => {
+  bgStart.value = randomHex();
+  bgEnd.value   = randomHex();
+  renderSlides();
+});
+
+renderSlides();   // initial render
+
+/* ---- Export all canvases ---- */
+exportBtn.addEventListener('click', () => {
+  const canvases = slidesDiv.querySelectorAll('canvas');
+  canvases.forEach((c, i) => {
+    const dataURL = c.toDataURL('image/jpeg', 0.9);
+    const a = document.createElement('a');
+    a.href = dataURL;
+    a.download = `slide_${i + 1}.jpg`;
+    a.click();
+  });
+});
+</script>
+
+</body>
+</html>
