@@ -14,7 +14,7 @@
   .controls > * {flex: 1 1 150px;}
   #slides {margin-top: 20px; display: flex; flex-direction: column; gap: 20px;}
   canvas {border: 2px solid #333; width: 100%; max-width: 100%;}
-  button {padding: 15px 10px; font-size: 16px;} /* Increased button size */
+  button {padding: 15px 10px; font-size: 16px;}
   input::placeholder, textarea::placeholder {color: #999;}
 </style>
 </head>
@@ -56,111 +56,214 @@
 <div id="slides"></div>
 
 <script>
-To make your code mobile-friendly, you'll want to focus on several key areas. Here’s a structured approach to ensure your website or web application is optimized for mobile devices:
+/* ---------- Configuration ---------- */
+const CANVAS_W = 1080;          // Instagram square
+const CANVAS_H = 1080;
+const MARGIN   = 80;           // equal margin on all sides
+const FONT_FAMILY = 'Arial';
+const FONT_SIZE   = 48;        // body text size (px)
+const LINE_HEIGHT = FONT_SIZE * 1.2;
+/* ----------------------------------- */
 
----
+const input        = document.getElementById('inputText');
+const subjectTitle = document.getElementById('subjectTitle');
+const titleSize    = document.getElementById('titleSize');
+const titleColor   = document.getElementById('titleColor');
+const textColor    = document.getElementById('textColor');
+const bgStart      = document.getElementById('bgStart');
+const bgEnd        = document.getElementById('bgEnd');
+const randomGradBtn= document.getElementById('randomGradBtn');
+const watermarkText= document.getElementById('watermarkText');
+const watermarkColor= document.getElementById('watermarkColor');
+const exportBtn    = document.getElementById('exportAllBtn');
+const slidesDiv    = document.getElementById('slides');
 
-## 1. Responsive Design
+/* ---- Helper: create a canvas with gradient background ---- */
+function createCanvas() {
+  const c = document.createElement('canvas');
+  c.width = CANVAS_W;
+  c.height = CANVAS_H;
+  const ctx = c.getContext('2d');
 
-### Use Media Queries
-Utilize CSS media queries to adjust styles based on the viewport size. Here’s a basic example:
-
-```css
-/* Base styles */
-body {
-    font-size: 16px;
+  const grad = ctx.createLinearGradient(0, 0, CANVAS_W, CANVAS_H);
+  grad.addColorStop(0, bgStart.value);
+  grad.addColorStop(1, bgEnd.value);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  return {c, ctx};
 }
 
-/* Mobile styles */
-@media (max-width: 600px) {
-    body {
-        font-size: 14px;
+/* ---- Random colour generator ---- */
+function randomHex() {
+  const r = Math.floor(Math.random() * 256);
+  const g = Math.floor(Math.random() * 256);
+  const b = Math.floor(Math.random() * 256);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
+/* ---- Measure text (cached ctx) ---- */
+let measureCtx = null;
+function getMeasureCtx() {
+  if (!measureCtx) {
+    const tmp = document.createElement('canvas');
+    measureCtx = tmp.getContext('2d');
+    measureCtx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+  }
+  return measureCtx;
+}
+function measureText(txt, size = FONT_SIZE) {
+  const ctx = getMeasureCtx();
+  ctx.font = `${size}px ${FONT_FAMILY}`;
+  return ctx.measureText(txt);
+}
+
+/* ---- Word‑wrap + justification (body text) ---- */
+function wrapAndJustify(paragraph) {
+  const words = paragraph.split(/\s+/).filter(w => w.length);
+  const maxLineWidth = CANVAS_W - 2 * MARGIN;
+  const lines = [];
+  let line = [];
+
+  while (words.length) {
+    const word = words.shift();
+    line.push(word);
+    const test = line.join(' ');
+    if (measureText(test).width > maxLineWidth) {
+      line.pop();
+      words.unshift(word);
+      lines.push(line);
+      line = [];
     }
+  }
+  if (line.length) lines.push(line);
+
+  return lines.map((wArr, i) => {
+    if (i === lines.length - 1 || wArr.length === 1) return wArr.join(' ');
+    const totalWordsWidth = wArr.reduce((s, w) => s + measureText(w).width, 0);
+    const spaceWidth = (maxLineWidth - totalWordsWidth) / (wArr.length - 1);
+    let lineStr = '';
+    wArr.forEach((w, idx) => {
+      lineStr += w;
+      if (idx < wArr.length - 1) {
+        const spaces = Math.max(1, Math.round(spaceWidth / measureText(' ').width));
+        lineStr += ' '.repeat(spaces);
+      }
+    });
+    return lineStr;
+  });
 }
-```
 
-### Flexible Grid Layouts
-Employ a grid system (like CSS Grid or Flexbox) to create fluid layouts that adapt to screen sizes.
+/* ---- Render all slides ---- */
+function renderSlides() {
+  slidesDiv.innerHTML = '';
+  const raw = input.value.trim();
+  if (!raw) return;
 
-```css
-.container {
-    display: flex;
-    flex-direction: column;
+  const title = subjectTitle.value.trim();
+  const hasTitle = title.length > 0;
+  const titleFontSize = parseInt(titleSize.value, 10) || 72;
+  const titleLineHeight = titleFontSize * 1.2;
+
+  const paragraphs = raw.split('\n');
+  const bodyLines = [];
+  paragraphs.forEach(p => {
+    if (p === '') bodyLines.push('');
+    else bodyLines.push(...wrapAndJustify(p));
+  });
+
+  let lineIdx = 0;
+  while (lineIdx < bodyLines.length) {
+    const {c, ctx} = createCanvas();
+
+    // title
+    let y = MARGIN;
+    if (hasTitle) {
+      ctx.fillStyle = titleColor.value;
+      ctx.font = `${titleFontSize}px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(title, CANVAS_W / 2, y);
+      y += titleLineHeight + 20;
+    }
+
+    // body text
+    ctx.fillStyle = textColor.value;
+    ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    while (lineIdx < bodyLines.length) {
+      const line = bodyLines[lineIdx];
+      const lineHeight = LINE_HEIGHT;
+      if (y + lineHeight > CANVAS_H - MARGIN) break;
+
+      if (line === '') y += lineHeight;
+      else {
+        drawJustifiedLine(ctx, line, y);
+        y += lineHeight;
+      }
+      lineIdx++;
+    }
+
+    // watermark
+    if (watermarkText.value.trim()) {
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = watermarkColor.value;
+      ctx.font = `120px ${FONT_FAMILY}`;
+      ctx.translate(CANVAS_W / 2, CANVAS_H / 2);
+      ctx.rotate(-Math.PI / 4);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(watermarkText.value, 0, 0);
+      ctx.restore();
+    }
+
+    slidesDiv.appendChild(c);
+  }
 }
 
-.item {
-    flex: 1; /* Each item will take up equal space */
+/* ---- Draw a single justified line (body text) ---- */
+function drawJustifiedLine(ctx, line, y) {
+  const maxLineWidth = CANVAS_W - 2 * MARGIN;
+  const words = line.split(' ');
+  if (words.length === 1) {
+    ctx.fillText(line, MARGIN, y);
+    return;
+  }
+  const wordsWidth = words.reduce((s, w) => s + ctx.measureText(w).width, 0);
+  const spaceWidth = (maxLineWidth - wordsWidth) / (words.length - 1);
+  let x = MARGIN;
+  words.forEach((w, i) => {
+    ctx.fillText(w, x, y);
+    x += ctx.measureText(w).width + spaceWidth;
+  });
 }
-```
 
----
+/* ---- Event listeners ---- */
+[input, subjectTitle, titleSize, titleColor, textColor,
+ bgStart, bgEnd, watermarkText, watermarkColor]
+ .forEach(el => el.addEventListener('input', renderSlides));
 
-## 2. Touch-Friendly Elements
+randomGradBtn.addEventListener('click', () => {
+  bgStart.value = randomHex();
+  bgEnd.value   = randomHex();
+  renderSlides();
+});
 
-### Increase Tap Targets
-Ensure buttons and links are large enough for fingertip interactions (at least 44px x 44px).
+renderSlides();   // initial render
 
-```css
-button {
-    padding: 12px 20px; /* Ensure sufficient padding */
-}
-```
-
-### Avoid Hover Effects
-Since hover states don’t work well on touch devices, ensure all interactions are accessible through taps.
-
----
-
-## 3. Optimize Images
-
-### Use Responsive Images
-Use the `<img>` tag with `srcset` to provide different image sizes for different devices.
-
-```html
-<img 
-    src="image-600.jpg" 
-    srcset="image-1200.jpg 1200w, image-600.jpg 600w" 
-    alt="Responsive Image">
-```
-
-### Compress Images
-Utilize tools like ImageOptim, TinyPNG, or online services to reduce image file sizes for faster loading.
-
----
-
-## 4. Ensure Fast Load Times
-
-### Minify and Compress Files
-Use tools like Gzip or Brotli compression for CSS and JS files and minify them to reduce size.
-
-### Asynchronous Loading
-Load scripts asynchronously to prevent blocking rendering.
-
-```html
-<script src="script.js" async></script>
-```
-
----
-
-## 5. Viewport Settings
-
-### Set the Viewport Meta Tag
-Add this meta tag in the `<head>` section of your HTML to control the layout on mobile browsers.
-
-```html
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-```
-
----
-
-## 6. Test Across Devices
-
-### Use Responsive Testing Tools
-Test your site using tools like Google Mobile-Friendly Test or BrowserStack to check how it performs on various devices.
-
----
-
-By focusing on these areas, your code should become much more friendly for mobile users. If you have specific code snippets you'd like to optimize or need help with, feel free to share!
+/* ---- Export all canvases ---- */
+exportBtn.addEventListener('click', () => {
+  const canvases = slidesDiv.querySelectorAll('canvas');
+  canvases.forEach((c, i) => {
+    const dataURL = c.toDataURL('image/jpeg', 0.9);
+    const a = document.createElement('a');
+    a.href = dataURL;
+    a.download = `slide_${i + 1}.jpg`;
+    a.click();
+  });
+});
 </script>
 
 </body>
