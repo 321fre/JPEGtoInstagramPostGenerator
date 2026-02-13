@@ -5,18 +5,24 @@
 <title>Justified Text → Instagram Slides (with Random Gradient)</title>
 <style>
   body {font-family: Arial, Helvetica, sans-serif; padding: 20px; background: #f4f4f4;}
-  textarea, input[type=text], input[type=number] {width: 100%; height: auto; resize: vertical;}
-  .controls {display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;}
-  @media (max-width: 768px) {
-    .controls {flex-direction: column;}
-    .controls > * {flex: none; width: 100%;}
+  textarea, input[type=text], input[type=number], input[type=color] {width: 100%; height: auto; resize: vertical;}
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
   }
-  .controls > * {flex: 1 1 150px;}
   #slides {margin-top: 20px; display: flex; flex-direction: column; gap: 20px;}
-  canvas {border: 2px solid #333; width: 100%; max-width: 100%;}
-  button {padding: 15px 10px; font-size: 16px;}
+  canvas {border: 2px solid #333; width: 100%; height: auto; max-width: 100%;}
+  button {padding: 12px; font-size: 16px; margin: 0;}
   input::placeholder, textarea::placeholder {color: #999;}
+  @media (max-width: 600px) {
+    h2 {font-size: 1.5em;}
+    h3 {font-size: 1.2em;}
+    button, input {font-size: 14px;}
+  }
 </style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
 
