@@ -37,6 +37,10 @@
   <label>Title font size (px)
     <input type="number" id="titleSize" min="30" max="200" value="72">
   </label>
+  <button id="toggleBoldBtn">Toggle Bold Title</button>
+  <label>Content font size (px)
+    <input type="number" id="contentSize" min="20" max="100" value="48">
+  </label>
   <label>Title colour
     <input type="color" id="titleColor" value="#ffffff">
   </label>
@@ -65,10 +69,10 @@
 /* ---------- Configuration ---------- */
 const CANVAS_W = 1080;          // Instagram square
 const CANVAS_H = 1080;
-const MARGIN   = 80;           // equal margin on all sides
+const MARGIN   = 80;            // equal margin on all sides
 const FONT_FAMILY = 'Arial';
-const FONT_SIZE   = 48;        // body text size (px)
-const LINE_HEIGHT = FONT_SIZE * 1.2;
+let fontSize   = 48;             // body text size (px)
+const LINE_HEIGHT = fontSize * 1.2;
 /* ----------------------------------- */
 
 const input        = document.getElementById('inputText');
@@ -82,7 +86,11 @@ const randomGradBtn= document.getElementById('randomGradBtn');
 const watermarkText= document.getElementById('watermarkText');
 const watermarkColor= document.getElementById('watermarkColor');
 const exportBtn    = document.getElementById('exportAllBtn');
+const toggleBoldBtn = document.getElementById('toggleBoldBtn');
+const contentSize   = document.getElementById('contentSize');
 const slidesDiv    = document.getElementById('slides');
+
+let isTitleBold = false; // Track if the title is bold
 
 /* ---- Helper: create a canvas with gradient background ---- */
 function createCanvas() {
@@ -113,11 +121,11 @@ function getMeasureCtx() {
   if (!measureCtx) {
     const tmp = document.createElement('canvas');
     measureCtx = tmp.getContext('2d');
-    measureCtx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+    measureCtx.font = `${fontSize}px ${FONT_FAMILY}`;
   }
   return measureCtx;
 }
-function measureText(txt, size = FONT_SIZE) {
+function measureText(txt, size = fontSize) {
   const ctx = getMeasureCtx();
   ctx.font = `${size}px ${FONT_FAMILY}`;
   return ctx.measureText(txt);
@@ -170,6 +178,7 @@ function renderSlides() {
   const titleFontSize = parseInt(titleSize.value, 10) || 72;
   const titleLineHeight = titleFontSize * 1.2;
 
+  fontSize = parseInt(contentSize.value, 10) || 48; // Use input for content font size
   const paragraphs = raw.split('\n');
   const bodyLines = [];
   paragraphs.forEach(p => {
@@ -185,7 +194,7 @@ function renderSlides() {
     let y = MARGIN;
     if (hasTitle) {
       ctx.fillStyle = titleColor.value;
-      ctx.font = `${titleFontSize}px ${FONT_FAMILY}`;
+      ctx.font = `${isTitleBold ? 'bold' : 'normal'} ${titleFontSize}px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(title, CANVAS_W / 2, y);
@@ -194,7 +203,7 @@ function renderSlides() {
 
     // body text
     ctx.fillStyle = textColor.value;
-    ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
@@ -247,13 +256,18 @@ function drawJustifiedLine(ctx, line, y) {
 }
 
 /* ---- Event listeners ---- */
-[input, subjectTitle, titleSize, titleColor, textColor,
+[input, subjectTitle, titleSize, contentSize, titleColor, textColor,
  bgStart, bgEnd, watermarkText, watermarkColor]
  .forEach(el => el.addEventListener('input', renderSlides));
 
 randomGradBtn.addEventListener('click', () => {
   bgStart.value = randomHex();
   bgEnd.value   = randomHex();
+  renderSlides();
+});
+
+toggleBoldBtn.addEventListener('click', () => {
+  isTitleBold = !isTitleBold; // Toggle bold state
   renderSlides();
 });
 
